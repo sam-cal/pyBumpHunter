@@ -54,6 +54,10 @@ def scan_hist(hist,ref,w_ar,self,ih):
             min_Pval,min_loc = np.empty(w_ar.size),np.empty(w_ar.size,dtype=int)
             signal_eval = np.empty(w_ar.size)
             
+            if self.useSideBand==True:
+               ref_total  = ref[Hinf:Hsup].sum()
+               hist_total = hist[Hinf:Hsup].sum()
+	    
             # Loop over all the width of the window
             i = 0
             for w in w_ar:
@@ -70,7 +74,7 @@ def scan_hist(hist,ref,w_ar,self,ih):
                 
                 # Check that there is at least one interval to check for width w
                 # If not, we must set dummy values in order to avoid crashes
-                if(pos.size==0):
+                if(pos.size<=1):
                     res[i] = np.array([1.0])
                     min_Pval[i] = 1.0
                     min_loc[i] = 0
@@ -79,21 +83,24 @@ def scan_hist(hist,ref,w_ar,self,ih):
                     continue
                 
                 # Initialize local p-value array for width w
-                res[i] = np.empty(pos.size)
+                res[i] = np.ones(pos.size)
                 
                 # Count events in all windows of width w
                 #FIXME any better way to do it ?? Without loop ?? FIXME
                 Nref = np.array([ref[p:p+w].sum() for p in pos])
                 Nhist = np.array([hist[p:p+w].sum() for p in pos])
                 
+                if self.useSideBand==True:
+                    Nref *= (hist_total-Nhist)/(ref_total-Nref) 
+                    
+                
                 # Calculate all local p-values for width w
                 if(self.mode=='excess'):
-                    res[i][Nhist<=Nref] = 1.0
                     res[i][Nhist>Nref] = G(Nhist[Nhist>Nref],Nref[Nhist>Nref])
                 elif(self.mode=='deficit'):
                     res[i][Nhist<Nref] = 1.0-G(Nhist[Nhist<Nref]+1,Nref[Nhist<Nref])
-                    res[i][Nhist>=Nref] = 1.0
-                res[i][(Nref==0) & (Nhist>0)] = 1.0 # To be consistant with c++ results
+                
+                res[i][res[i]==0] = 1e-300
                 
                 # Get the minimum p-value and associated position for width w
                 min_Pval[i] = res[i].min()
@@ -115,7 +122,7 @@ def scan_hist(hist,ref,w_ar,self,ih):
             # Save the results in inner variables and return
             self.res_ar[ih] = res
             self.min_Pval_ar[ih] = min_Pval
-            self.min_loc_ar[ih] = int(min_loc)
+            self.min_loc_ar[ih]   = int(min_loc)
             self.min_width_ar[ih] = int(min_width)
             return
 
@@ -230,7 +237,7 @@ class BumpHunter():
                  Npe=100,bins=60,weights=None,Nworker=4,
                  sigma_limit=5,str_min=0.5,str_step=0.25,
                  str_scale='lin',
-                 signal_exp=None,flip_sig=True,seed=None):
+                 signal_exp=None,flip_sig=True,seed=None, useSideBand=False):
         
         # Initilize all inner parameter variables
         self.rang = rang
@@ -250,6 +257,7 @@ class BumpHunter():
         self.signal_exp = signal_exp
         self.flip_sig = flip_sig
         self.seed = seed
+        self.useSideBand = useSideBand
         
         # Initialize all inner result variables
         self.Reset()
@@ -307,6 +315,7 @@ class BumpHunter():
         state['str_scale'] = self.str_scale
         state['signal_exp'] = self.signal_exp
         state['sig_flip'] = self.flip_sig
+        state['useSideBand'] = self.useSideBand
         
         # Save results
         state['global_Pval'] = self.global_Pval
@@ -388,6 +397,11 @@ class BumpHunter():
             self.seed = state['seed']
         else:
             self.seed = None
+        
+        if 'useSideBand' in state.keys():
+            self.useSideBand = state['useSideBand']
+        else:
+            self.seed = False
         
         if 'sigma_limit' in state.keys():
             self.sigma_limit = state['sigma_limit']
@@ -955,6 +969,7 @@ class BumpHunter():
             plt.title('BumpHunter statistics distribution      global p-value = {0:1.4f}'.format(self.global_Pval))
         else:
             plt.title('BumpHunter statistics distribution')
+        
         H=plt.hist(self.t_ar[1:],bins=100,histtype='step',linewidth=2,label='pseudo-data')
         plt.plot(np.full(2,self.t_ar[0]),np.array([0,H[0].max()]),'r--',linewidth=2,label='data')
         plt.legend(fontsize='large')
