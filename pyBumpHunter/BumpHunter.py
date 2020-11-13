@@ -86,7 +86,7 @@ def scan_hist(hist,ref,w_ar,self,ih):
                 Nref = np.array([ref[p:p+w].sum() for p in pos])
                 Nhist = np.array([hist[p:p+w].sum() for p in pos])
                 
-                # Calculate all local p-values for for width w
+                # Calculate all local p-values for width w
                 if(self.mode=='excess'):
                     res[i][Nhist<=Nref] = 1.0
                     res[i][Nhist>Nref] = G(Nhist[Nhist>Nref],Nref[Nhist>Nref])
